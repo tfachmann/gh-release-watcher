@@ -1,0 +1,17 @@
+[package]
+name = "gh-release-watcher"
+version = "0.1.0"
+authors = ["tfachmann <fachmanntj@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reqwest = { version = "0.9"}
+scraper = "0.12"
+url = "2.2"
+regex = "1.4"
+standard_paths = "0.4"
+toml = "0.5"
+serde = "1.0"
+serde_derive = "1.0"
