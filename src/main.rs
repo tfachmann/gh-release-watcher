@@ -19,14 +19,10 @@ fn parse_repo(url: &str, key: &str, version: &str, email: &str) -> Option<String
     assert!(resp.status().is_success());
 
     let body = resp.text().unwrap();
-
-    // parses string of HTML as a document
     let fragment = Html::parse_document(&body);
-    // parses based on a CSS selector
     let title = Selector::parse("title").unwrap();
-
     let re = Regex::new(r"\d\.\d\.\d").unwrap();
-    // iterate over elements matching our selector
+
     let mut title_it = fragment.select(&title);
     let version_new = match title_it.next() {
         Some(x) => match x.text().next() {
@@ -43,7 +39,7 @@ fn parse_repo(url: &str, key: &str, version: &str, email: &str) -> Option<String
     // new version!
     println!("New Version! {}", version_new);
 
-    // maybe check datetime somehow?
+    // check date of release
     let time = Selector::parse("relative-time").unwrap();
     let mut time_it = fragment.select(&time);
     let datetime = match time_it.next() {
@@ -80,11 +76,14 @@ struct Application {
 }
 
 impl Application {
-    fn new(path: &PathBuf) -> Result<Self, std::io::Error> { 
-        let data_str =
-            fs::read_to_string(path).expect(&format!("Could not open `{}`", path.to_str().unwrap()));
+    fn new(path: &PathBuf) -> Result<Self, std::io::Error> {
+        let data_str = fs::read_to_string(path)
+            .expect(&format!("Could not open `{}`", path.to_str().unwrap()));
         let config: Config<Github, Gitlab> = toml::from_str(&data_str)?;
-        Ok(Self { config, path: path.clone() })
+        Ok(Self {
+            config,
+            path: path.clone(),
+        })
     }
 
     fn save(&self) {
@@ -129,61 +128,41 @@ where
 
 impl<T: UrlGroup + Clone, U: UrlGroup + Clone> Config<T, U> {
     fn print_info(&self) {
-        match &self.github {
-            Some(x) => {
-                for (key, _) in x.data().iter() {
-                    println!("Watching `{}`...", &x.url(&key));
-                }
+        fn print_group<V: UrlGroup>(x: &Option<V>) {
+            if let Some(v) = x {
+                v.data()
+                    .iter()
+                    .for_each(|(key, _)| println!("Watching `{}`...", v.url(&key)));
             }
-            None => {}
         }
 
-        match &self.gitlab {
-            Some(x) => {
-                for (key, _) in x.data().iter() {
-                    println!("Watching `{}`...", &x.url(&key));
-                }
-            }
-            None => {}
-        }
+        print_group(&self.github);
+        print_group(&self.gitlab);
     }
 
     fn check_repos(&mut self) -> bool {
-        let mut changed = false;
-        match &mut self.github {
-            Some(x) => {
-                let x_cl = x.clone();
-                for (key, val) in x.data_mut().iter_mut() {
-                    match parse_repo(&x_cl.url(&key), &key, &val, &self.config.email) {
-                        Some(x) => {
-                            *val = x;
-                            changed = true;
-                        }
-                        None => (),
+        #[must_use]
+        fn check_group<V: UrlGroup + Clone>(x: &mut Option<V>, email: &str) -> bool {
+            let mut changed = false;
+            if let Some(v) = x {
+                let x_cl = v.clone();
+                for (key, val) in v.data_mut().iter_mut() {
+                    if let Some(x) = parse_repo(&x_cl.url(&key), &key, &val, email) {
+                        *val = x;
+                        changed = true;
                     }
-                    //self.parse_repo(&x.url(&key), &key, &val, &self.config.email);
                 }
             }
-            None => {}
+            changed
         }
 
-        match &mut self.gitlab {
-            Some(x) => {
-                let x_cl = x.clone();
-                for (key, val) in x.data_mut().iter_mut() {
-                    let new_version = parse_repo(&x_cl.url(&key), &key, &val, &self.config.email);
-                    match new_version {
-                        Some(x) => {
-                            *val = x;
-                            changed = true;
-                        }
-                        None => (),
-                    }
-                }
-            }
-            None => {}
+        if check_group(&mut self.github, &self.config.email)
+            || check_group(&mut self.gitlab, &self.config.email)
+        {
+            true
+        } else {
+            false
         }
-        changed
     }
 }
 
